@@ -35,19 +35,26 @@ def health():
     return {"status": "ok", "graph_loaded": G is not None}
 
 
+from routing import generate_loop_route_tuned, generate_point_to_point_route
+
 @app.post("/generate-route", response_model=RouteResponse)
 def generate_route(req: RouteRequest):
     if G is None:
         raise HTTPException(status_code=503, detail="Graph not loaded yet")
 
-    route, dist = generate_loop_route_tuned(
-        G, req.start_lat, req.start_lon, req.target_distance_m
-    )
+    if req.end_lat is not None and req.end_lon is not None:
+        route, dist = generate_point_to_point_route(
+            G, req.start_lat, req.start_lon, req.end_lat, req.end_lon, req.target_distance_m
+        )
+    else:
+        route, dist = generate_loop_route_tuned(
+            G, req.start_lat, req.start_lon, req.target_distance_m
+        )
 
     if route is None:
         raise HTTPException(status_code=500, detail="Could not generate a route for this location")
 
-    coords = [(G.nodes[n]["y"], G.nodes[n]["x"]) for n in route]  # y=lat, x=lon
+    coords = [(G.nodes[n]["y"], G.nodes[n]["x"]) for n in route]
 
     return RouteResponse(
         coordinates=coords,
