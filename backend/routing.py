@@ -35,6 +35,16 @@ def surface_factor(edge, surface="any"):
     return 1.0
 
 
+def footpath_distance(G, route):
+    """Metres of the route that run along footpath-type edges."""
+    total = 0
+    for u, v in zip(route, route[1:]):
+        edge = min(G.get_edge_data(u, v).values(), key=lambda d: d.get("length", 1))
+        if _highway_types(edge) & FOOTPATH_TYPES:
+            total += edge.get("length", 0)
+    return total
+
+
 def _edge_cost(edge_data, surface):
     # edge_data can hold multiple parallel edges between u,v (OSMnx multigraph) - take the cheapest
     return min(d.get("length", 1) * surface_factor(d, surface) for d in edge_data.values())

@@ -15,3 +15,11 @@ class RouteResponse(BaseModel):
     coordinates: List[Tuple[float, float]]  # [(lat, lon), (lat, lon), ...]
     actual_distance_m: float
     target_distance_m: float
+    footpath_distance_m: float
+
+
+class CoverageResponse(BaseModel):
+    south: float
+    west: float
+    north: float
+    east: float
