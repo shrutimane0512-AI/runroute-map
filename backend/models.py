@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Literal
 
 
 class RouteRequest(BaseModel):
@@ -8,6 +8,7 @@ class RouteRequest(BaseModel):
     target_distance_m: float
     end_lat: Optional[float] = None
     end_lon: Optional[float] = None
+    surface: Literal["any", "road", "footpath"] = "any"
 
 
 class RouteResponse(BaseModel):

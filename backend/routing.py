@@ -1,9 +1,47 @@
+import re
+
 import osmnx as ox
 import networkx as nx
 import numpy as np
 
 
-def generate_loop_route(G, start_lat, start_lon, target_distance_m, num_waypoints=4, repeat_penalty=3.0):
+FOOTPATH_TYPES = {"footway", "path", "pedestrian", "track", "steps", "living_street", "cycleway"}
+
+# Multiplier applied to edges that don't match the chosen surface preference.
+# Kept soft (not infinite) so routes can still connect through the other type.
+SURFACE_PENALTY = 3.0
+
+
+def _highway_types(edge):
+    hw = edge.get("highway", "")
+    if isinstance(hw, list):
+        return set(hw)
+    # graphml stores multi-valued tags as strings like "['footway', 'steps']"
+    return set(re.findall(r"[a-z_]+", hw))
+
+
+def surface_factor(edge, surface="any"):
+    """
+    Cost multiplier for an edge based on the user's surface preference.
+    'road' favours regular paved streets, 'footpath' favours footways/paths.
+    """
+    if surface == "any":
+        return 1.0
+    is_footpath = bool(_highway_types(edge) & FOOTPATH_TYPES)
+    if surface == "footpath":
+        return 1.0 if is_footpath else SURFACE_PENALTY
+    if surface == "road":
+        return SURFACE_PENALTY if is_footpath else 1.0
+    return 1.0
+
+
+def _edge_cost(edge_data, surface):
+    # edge_data can hold multiple parallel edges between u,v (OSMnx multigraph) - take the cheapest
+    return min(d.get("length", 1) * surface_factor(d, surface) for d in edge_data.values())
+
+
+def generate_loop_route(G, start_lat, start_lon, target_distance_m, num_waypoints=4, repeat_penalty=3.0,
+                        surface="any"):
     """
     Generates one loop route attempt using the given graph G.
     Penalizes edges already used in earlier legs so the route avoids
@@ -27,8 +65,7 @@ def generate_loop_route(G, start_lat, start_lon, target_distance_m, num_waypoint
     used_edges = {}
 
     def weight_fn(u, v, edge_data):
-        # edge_data can hold multiple parallel edges between u,v (OSMnx multigraph) - take the shortest
-        base_length = min(d.get("length", 1) for d in edge_data.values())
+        base_length = _edge_cost(edge_data, surface)
         times_used = used_edges.get((u, v), 0) + used_edges.get((v, u), 0)
         return base_length * (repeat_penalty ** times_used)
 
@@ -55,7 +92,7 @@ def generate_loop_route(G, start_lat, start_lon, target_distance_m, num_waypoint
     return full_route, total_length
 
 def generate_loop_route_tuned(G, start_lat, start_lon, target_distance_m,
-                                tolerance=0.15, max_attempts=6, num_waypoints=4):
+                                tolerance=0.15, max_attempts=6, num_waypoints=4, surface="any"):
     """
     Calls generate_loop_route repeatedly, scaling the search radius each
     time to converge on something close to target_distance_m.
@@ -70,7 +107,8 @@ def generate_loop_route_tuned(G, start_lat, start_lon, target_distance_m,
             route, dist = generate_loop_route(
                 G, start_lat, start_lon,
                 target_distance_m * radius_multiplier,
-                num_waypoints=num_waypoints
+                num_waypoints=num_waypoints,
+                surface=surface
             )
         except Exception:
             # nearest_nodes / shortest_path can fail if waypoints fall
@@ -93,12 +131,17 @@ def generate_loop_route_tuned(G, start_lat, start_lon, target_distance_m,
 
 
 def generate_point_to_point_route(G, start_lat, start_lon, end_lat, end_lon,
-                                    target_distance_m, tolerance=0.15, max_attempts=6, repeat_penalty=3.0):
+                                    target_distance_m, tolerance=0.15, max_attempts=6, repeat_penalty=3.0,
+                                    surface="any"):
     start_node = ox.distance.nearest_nodes(G, start_lon, start_lat)
     end_node = ox.distance.nearest_nodes(G, end_lon, end_lat)
 
-    direct_route = nx.shortest_path(G, start_node, end_node, weight="length")
-    direct_length = nx.shortest_path_length(G, start_node, end_node, weight="length")
+    direct_route = nx.shortest_path(G, start_node, end_node,
+                                    weight=lambda u, v, d: _edge_cost(d, surface))
+    direct_length = sum(
+        min(d.get("length", 1) for d in G.get_edge_data(direct_route[j], direct_route[j+1]).values())
+        for j in range(len(direct_route) - 1)
+    )
 
     if direct_length >= target_distance_m * (1 - tolerance):
         return direct_route, direct_length
@@ -127,7 +170,7 @@ def generate_point_to_point_route(G, start_lat, start_lon, end_lat, end_lon,
 
             used_edges = {}
             def weight_fn(u, v, edge_data):
-                base_length = min(d.get("length", 1) for d in edge_data.values())
+                base_length = _edge_cost(edge_data, surface)
                 times_used = used_edges.get((u, v), 0) + used_edges.get((v, u), 0)
                 return base_length * (repeat_penalty ** times_used)
 

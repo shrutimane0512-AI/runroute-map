@@ -44,11 +44,13 @@ def generate_route(req: RouteRequest):
 
     if req.end_lat is not None and req.end_lon is not None:
         route, dist = generate_point_to_point_route(
-            G, req.start_lat, req.start_lon, req.end_lat, req.end_lon, req.target_distance_m
+            G, req.start_lat, req.start_lon, req.end_lat, req.end_lon, req.target_distance_m,
+            surface=req.surface
         )
     else:
         route, dist = generate_loop_route_tuned(
-            G, req.start_lat, req.start_lon, req.target_distance_m
+            G, req.start_lat, req.start_lon, req.target_distance_m,
+            surface=req.surface
         )
 
     if route is None:

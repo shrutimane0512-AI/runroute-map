@@ -51,6 +51,7 @@ function App() {
   const [start, setStart] = useState(null);
   const [end, setEnd] = useState(null);
   const [sameStartEnd, setSameStartEnd] = useState(true);
+  const [surface, setSurface] = useState('any');
   const [distance, setDistance] = useState(5000);
   const [route, setRoute] = useState(null);
   const [actualDistance, setActualDistance] = useState(null);
@@ -65,7 +66,8 @@ function App() {
       const body = {
         start_lat: start.lat,
         start_lon: start.lng,
-        target_distance_m: distance
+        target_distance_m: distance,
+        surface
       };
       if (!sameStartEnd && end) {
         body.end_lat = end.lat;
@@ -183,6 +185,40 @@ function App() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Surface preference */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+            Route type
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[
+              { value: 'any', label: 'Any' },
+              { value: 'road', label: '🛣️ Concrete roads' },
+              { value: 'footpath', label: '🚶 Footpaths' }
+            ].map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setSurface(opt.value)}
+                style={{
+                  flex: 1,
+                  padding: '12px 8px',
+                  borderRadius: 10,
+                  border: surface === opt.value ? '2px solid #2563eb' : '1.5px solid #e2e8f0',
+                  background: surface === opt.value ? '#eff6ff' : '#fff',
+                  fontSize: 14, fontWeight: 600,
+                  color: '#0f172a',
+                  cursor: 'pointer'
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>
+            Routes favour this type but may use others to connect.
+          </div>
         </div>
 
         {/* Distance slider */}
