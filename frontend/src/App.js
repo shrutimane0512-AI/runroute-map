@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { MapContainer, TileLayer, Marker, Polyline, useMapEvents } from 'react-leaflet';
+import { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -48,7 +48,30 @@ function DirectionArrows({ positions }) {
   return arrows;
 }
 
+const MOBILE_QUERY = '(max-width: 768px)';
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
+  useEffect(() => {
+    const mql = window.matchMedia(MOBILE_QUERY);
+    const onChange = e => setIsMobile(e.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+  return isMobile;
+}
+
+// Leaflet caches its container size, so tell it to re-measure when the layout switches
+function ResizeOnLayoutChange({ isMobile }) {
+  const map = useMap();
+  useEffect(() => {
+    map.invalidateSize();
+  }, [map, isMobile]);
+  return null;
+}
+
 function App() {
+  const isMobile = useIsMobile();
   const [pickMode, setPickMode] = useState('start');
   const [start, setStart] = useState(null);
   const [end, setEnd] = useState(null);
@@ -95,16 +118,24 @@ function App() {
   const canGenerate = start && (sameStartEnd || end) && !loading;
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{
+      display: 'flex',
+      // On mobile, stack the map above the controls and let the page scroll
+      flexDirection: isMobile ? 'column' : 'row',
+      height: isMobile ? 'auto' : '100vh',
+      fontFamily: 'system-ui, -apple-system, sans-serif'
+    }}>
 
       {/* LEFT SIDEBAR */}
       <div style={{
-        width: 380,
+        order: isMobile ? 1 : 0,
+        width: isMobile ? 'auto' : 380,
         flexShrink: 0,
         background: '#ffffff',
-        borderRight: '1px solid #e2e8f0',
-        padding: '32px 28px',
-        overflowY: 'auto',
+        borderRight: isMobile ? 'none' : '1px solid #e2e8f0',
+        borderTop: isMobile ? '1px solid #e2e8f0' : 'none',
+        padding: isMobile ? '20px 16px 32px' : '32px 28px',
+        overflowY: isMobile ? 'visible' : 'auto',
         boxShadow: '2px 0 8px rgba(0,0,0,0.04)'
       }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, margin: '0 0 4px', color: '#0f172a' }}>
@@ -290,8 +321,9 @@ function App() {
       </div>
 
       {/* MAP */}
-      <div style={{ flex: 1 }}>
+      <div style={isMobile ? { height: '55vh', flexShrink: 0 } : { flex: 1 }}>
         <MapContainer center={[18.5204, 73.8567]} zoom={14} style={{ height: '100%', width: '100%' }}>
+          <ResizeOnLayoutChange isMobile={isMobile} />
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; OpenStreetMap contributors'
