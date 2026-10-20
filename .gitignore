@@ -15,8 +15,5 @@ frontend/build/
 # OS junk
 .DS_Store
 
-# Large generated graph file (optional - see note below)
-backend/pune_graph.graphml
-
 # OSMnx cache
 backend/cache/

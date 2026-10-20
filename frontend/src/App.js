@@ -3,6 +3,8 @@ import { MapContainer, TileLayer, Marker, Polyline, useMapEvents } from 'react-l
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 const startIcon = new L.Icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
@@ -74,7 +76,7 @@ function App() {
         body.end_lon = end.lng;
       }
 
-      const res = await fetch('http://localhost:8000/generate-route', {
+      const res = await fetch(`${API_URL}/generate-route`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
