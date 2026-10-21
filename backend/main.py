@@ -16,6 +16,11 @@ app.add_middleware(
 )
 
 GRAPH_PATH = "pune_graph.graphml"
+
+# A route only counts as e.g. "dirt" if at least this share of it is on dirt
+MIN_SURFACE_SHARE = 0.1
+
+SURFACE_LABELS = {"road": "concrete road", "footpath": "footpath", "grass": "grass", "dirt": "dirt"}
 G = None  # loaded at startup
 COVERAGE = None  # bounding box of the loaded graph
 
@@ -46,7 +51,7 @@ def coverage():
     return COVERAGE
 
 
-from routing import generate_loop_route_tuned, generate_point_to_point_route, footpath_distance
+from routing import generate_loop_route_tuned, generate_point_to_point_route, footpath_distance, surface_distance, route_coordinates
 
 @app.post("/generate-route", response_model=RouteResponse)
 def generate_route(req: RouteRequest):
@@ -67,11 +72,20 @@ def generate_route(req: RouteRequest):
     if route is None:
         raise HTTPException(status_code=500, detail="Could not generate a route for this location")
 
-    coords = [(G.nodes[n]["y"], G.nodes[n]["x"]) for n in route]
+    matched = surface_distance(G, route, req.surface)
+    if req.surface != "any" and matched < dist * MIN_SURFACE_SHARE:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No {SURFACE_LABELS[req.surface]} route available here. "
+                   f"Try another start point or route type.",
+        )
+
+    coords = route_coordinates(G, route)
 
     return RouteResponse(
         coordinates=coords,
         actual_distance_m=dist,
         target_distance_m=req.target_distance_m,
         footpath_distance_m=footpath_distance(G, route),
+        surface_distance_m=matched,
     )

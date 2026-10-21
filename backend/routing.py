@@ -7,6 +7,12 @@ import numpy as np
 
 FOOTPATH_TYPES = {"footway", "path", "pedestrian", "track", "steps", "living_street", "cycleway"}
 
+# OSM `surface` values that count as each natural-surface preference
+SURFACE_TAGS = {
+    "grass": {"grass", "grass_paver"},
+    "dirt": {"dirt", "ground", "earth", "unpaved", "compacted", "mud"},
+}
+
 # Multiplier applied to edges that don't match the chosen surface preference.
 # Kept soft (not infinite) so routes can still connect through the other type.
 SURFACE_PENALTY = 3.0
@@ -20,29 +26,66 @@ def _highway_types(edge):
     return set(re.findall(r"[a-z_]+", hw))
 
 
+def _surface_tags(edge):
+    s = edge.get("surface", "")
+    if isinstance(s, list):
+        return set(s)
+    return set(re.findall(r"[a-z_]+", s))
+
+
+def matches_surface(edge, surface):
+    """Whether an edge is the kind of way the user asked for."""
+    if surface == "any":
+        return True
+    if surface in SURFACE_TAGS:
+        return bool(_surface_tags(edge) & SURFACE_TAGS[surface])
+    is_footpath = bool(_highway_types(edge) & FOOTPATH_TYPES)
+    return is_footpath if surface == "footpath" else not is_footpath
+
+
 def surface_factor(edge, surface="any"):
     """
     Cost multiplier for an edge based on the user's surface preference.
-    'road' favours regular paved streets, 'footpath' favours footways/paths.
+    'road' favours regular paved streets, 'footpath' favours footways/paths,
+    'grass' and 'dirt' favour edges with that OSM surface tag.
     """
-    if surface == "any":
-        return 1.0
-    is_footpath = bool(_highway_types(edge) & FOOTPATH_TYPES)
-    if surface == "footpath":
-        return 1.0 if is_footpath else SURFACE_PENALTY
-    if surface == "road":
-        return SURFACE_PENALTY if is_footpath else 1.0
-    return 1.0
+    return 1.0 if matches_surface(edge, surface) else SURFACE_PENALTY
+
+
+def surface_distance(G, route, surface):
+    """Metres of the route that run along edges matching `surface`."""
+    total = 0
+    for u, v in zip(route, route[1:]):
+        edge = min(G.get_edge_data(u, v).values(), key=lambda d: d.get("length", 1))
+        if matches_surface(edge, surface):
+            total += edge.get("length", 0)
+    return total
+
+
+def route_coordinates(G, route):
+    """
+    (lat, lon) points tracing the route along each edge's actual shape,
+    not just straight lines between junctions.
+    """
+    coords = [(G.nodes[route[0]]["y"], G.nodes[route[0]]["x"])]
+    for u, v in zip(route, route[1:]):
+        edge = min(G.get_edge_data(u, v).values(), key=lambda d: d.get("length", 1))
+        if "geometry" not in edge:
+            coords.append((G.nodes[v]["y"], G.nodes[v]["x"]))
+            continue
+        points = list(edge["geometry"].coords)  # (lon, lat)
+        # geometry may be stored in the v -> u direction
+        ux, uy = G.nodes[u]["x"], G.nodes[u]["y"]
+        start, end = points[0], points[-1]
+        if (start[0] - ux) ** 2 + (start[1] - uy) ** 2 > (end[0] - ux) ** 2 + (end[1] - uy) ** 2:
+            points.reverse()
+        coords.extend((lat, lon) for lon, lat in points[1:])
+    return coords
 
 
 def footpath_distance(G, route):
     """Metres of the route that run along footpath-type edges."""
-    total = 0
-    for u, v in zip(route, route[1:]):
-        edge = min(G.get_edge_data(u, v).values(), key=lambda d: d.get("length", 1))
-        if _highway_types(edge) & FOOTPATH_TYPES:
-            total += edge.get("length", 0)
-    return total
+    return surface_distance(G, route, "footpath")
 
 
 def _edge_cost(edge_data, surface):

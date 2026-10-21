@@ -12,8 +12,13 @@ const ROUTE_COLOR = '#ea580c';
 const ROUTE_TYPES = [
   { value: 'any', icon: '🗺️', label: 'Any', hint: 'Best mix of everything' },
   { value: 'road', icon: '🛣️', label: 'Concrete roads', hint: 'Smooth, regular streets' },
-  { value: 'footpath', icon: '🌳', label: 'Footpaths', hint: 'Walkways & trails' }
+  { value: 'footpath', icon: '🌳', label: 'Footpaths', hint: 'Walkways & trails' },
+  { value: 'grass', icon: '🌱', label: 'Grass', hint: 'Soft, low-impact turf' },
+  { value: 'dirt', icon: '🟤', label: 'Dirt', hint: 'Earth & unpaved trails' }
 ];
+
+// Grass and dirt results show their own share; other types show footpath vs road
+const NATURAL_SURFACES = ['grass', 'dirt'];
 
 const DISTANCE_PRESETS = [3000, 5000, 10000, 15000];
 
@@ -288,12 +293,20 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
+      if (res.status === 404) {
+        // the server found no route of the chosen type near this start point
+        const data = await res.json().catch(() => ({}));
+        const label = ROUTE_TYPES.find(t => t.value === surface).label.toLowerCase();
+        setResult(null);
+        setError(data.detail || `No ${label} route available here. Try another start point or route type.`);
+        return;
+      }
       if (!res.ok) {
         throw new Error(res.status >= 500
           ? "Couldn't build a route from here. Try moving your start point or changing the distance."
           : `Request failed (${res.status}).`);
       }
-      setResult(await res.json());
+      setResult({ ...(await res.json()), surface });
       setServer('online');
     } catch (err) {
       if (err instanceof TypeError) {
@@ -317,10 +330,12 @@ function App() {
 
   const routeKm = result ? result.actual_distance_m / 1000 : 0;
   const targetKm = result ? result.target_distance_m / 1000 : 0;
-  const footKm = result ? result.footpath_distance_m / 1000 : 0;
-  const footShare = result && result.actual_distance_m > 0
-    ? result.footpath_distance_m / result.actual_distance_m
+  const natural = result && NATURAL_SURFACES.includes(result.surface);
+  const naturalLabel = natural ? ROUTE_TYPES.find(t => t.value === result.surface).label : null;
+  const footKm = result
+    ? (natural ? result.surface_distance_m : result.footpath_distance_m) / 1000
     : 0;
+  const footShare = result && result.actual_distance_m > 0 ? footKm * 1000 / result.actual_distance_m : 0;
   const deltaKm = routeKm - targetKm;
 
   return (
@@ -480,7 +495,7 @@ function App() {
               </div>
               <div className="stat">
                 <div className="stat-value">{Math.round(footShare * 100)}%</div>
-                <div className="stat-label">Footpath</div>
+                <div className="stat-label">{natural ? naturalLabel : 'Footpath'}</div>
               </div>
             </div>
 
@@ -502,8 +517,8 @@ function App() {
                 <div className="road" style={{ width: `${(1 - footShare) * 100}%` }} />
               </div>
               <div className="legend">
-                <span><i className="foot" />Footpath {footKm.toFixed(1)} km</span>
-                <span><i className="road" />Road {(routeKm - footKm).toFixed(1)} km</span>
+                <span><i className="foot" />{natural ? naturalLabel : 'Footpath'} {footKm.toFixed(1)} km</span>
+                <span><i className="road" />{natural ? 'Other' : 'Road'} {(routeKm - footKm).toFixed(1)} km</span>
               </div>
             </div>
 

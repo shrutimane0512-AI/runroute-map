@@ -8,7 +8,7 @@ class RouteRequest(BaseModel):
     target_distance_m: float
     end_lat: Optional[float] = None
     end_lon: Optional[float] = None
-    surface: Literal["any", "road", "footpath"] = "any"
+    surface: Literal["any", "road", "footpath", "grass", "dirt"] = "any"
 
 
 class RouteResponse(BaseModel):
@@ -16,6 +16,7 @@ class RouteResponse(BaseModel):
     actual_distance_m: float
     target_distance_m: float
     footpath_distance_m: float
+    surface_distance_m: float  # metres matching the requested surface
 
 
 class CoverageResponse(BaseModel):
